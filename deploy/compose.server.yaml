@@ -1,0 +1,41 @@
+# Running Monaa-Lisa on a server behind a reverse proxy (Caddy) that is
+# already there and reaches its apps over the external docker network `proxy`.
+#
+#   docker compose -f docker-compose.yml -f deploy/compose.server.yaml up -d --build
+#
+# The differences to the local setup:
+#   - backend and frontend publish no ports, the proxy reaches them on the
+#     `proxy` network as monaa-backend:3000 and monaa-frontend:3000
+#   - the browser calls the API on the same domain under /api (see
+#     deploy/Caddyfile), so set in .env:
+#         FRONTEND_ORIGIN=https://<domain>
+#         PUBLIC_API_BASE_URL=https://<domain>/api
+#         TRUST_PROXY=1
+#   - the Python pipeline (`app`) does not start by itself. It loads the 6 GB
+#     UMAP model and fetches new papers from arXiv, which the site does not
+#     need to run. Start it on purpose with --profile pipeline.
+
+services:
+  app:
+    profiles: ["pipeline"]
+
+  backend:
+    ports: !reset []
+    networks:
+      default: {}
+      proxy:
+        aliases: [monaa-backend]
+
+  frontend:
+    ports: !reset []
+    environment:
+      # adapter-node checks the origin of form posts against this
+      ORIGIN: ${FRONTEND_ORIGIN:?Set FRONTEND_ORIGIN in .env}
+    networks:
+      default: {}
+      proxy:
+        aliases: [monaa-frontend]
+
+networks:
+  proxy:
+    external: true

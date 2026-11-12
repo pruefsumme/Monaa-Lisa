@@ -1,0 +1,15 @@
+# The site block for the server's Caddy (deploy/compose.server.yaml).
+# The API lives on the same domain under /api, so the browser needs no CORS.
+
+monaa.pruefsumme.xyz {
+	encode zstd gzip
+	header Strict-Transport-Security "max-age=31536000"
+
+	handle_path /api/* {
+		reverse_proxy monaa-backend:3000
+	}
+
+	handle {
+		reverse_proxy monaa-frontend:3000
+	}
+}
