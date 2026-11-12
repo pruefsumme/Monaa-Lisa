@@ -2,6 +2,9 @@ services:
   db:
     image: pgvector/pgvector:pg16
     restart: unless-stopped
+    # Parallel index builds (hnsw after the dataset import) use shared memory,
+    # Docker's default of 64 MB is far too small for them
+    shm_size: 2gb
     environment:
       POSTGRES_USER: ${POSTGRES_USER-monaa}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}

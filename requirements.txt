@@ -3,6 +3,10 @@ numpy==2.2.5
 joblib==1.5.3
 scikit-learn==1.8.0
 umap-learn==0.5.11
+# The UMAP model in mirrors.json was pickled with pynndescent 0.5.x, 0.7 can
+# no longer load it ('NNDescent' object has no attribute 'search_tree_leaf_budget')
+pynndescent==0.5.13
+numba==0.68.1
 
 # Database
 psycopg2-binary==2.9.10

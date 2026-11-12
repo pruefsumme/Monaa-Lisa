@@ -325,11 +325,83 @@ def update_arxiv_citation_counts(conn):
 # Main import loop
 # ---------------------------------------------------------------------------
 
+IMPORT_TABLES = ("paper", "embedding", "paper_citation", "paper_reference")
+
+
+def drop_secondary_indexes(conn):
+    """Drops the non-unique indexes of the import tables for the bulk load.
+
+    Keeping an hnsw and four trigram indexes up to date row by row makes a
+    full import take many hours, building them once at the end takes minutes.
+    Unique indexes stay, ON CONFLICT needs them. The definitions are saved in
+    _import_dropped_index first, so an import that is killed half way gets
+    them back on its next run.
+    """
+    with conn.cursor() as cur:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS _import_dropped_index (
+                indexname TEXT PRIMARY KEY,
+                indexdef TEXT NOT NULL
+            );
+        """)
+        cur.execute("""
+            INSERT INTO _import_dropped_index (indexname, indexdef)
+            SELECT i.indexname, i.indexdef
+            FROM pg_indexes i
+            JOIN pg_class c ON c.relname = i.indexname
+            JOIN pg_index x ON x.indexrelid = c.oid
+            WHERE i.schemaname = 'public'
+              AND i.tablename = ANY(%s)
+              AND NOT x.indisunique
+            ON CONFLICT (indexname) DO NOTHING;
+        """, (list(IMPORT_TABLES),))
+        conn.commit()
+        cur.execute("SELECT indexname FROM _import_dropped_index ORDER BY indexname;")
+        names = [r[0] for r in cur.fetchall()]
+        for name in names:
+            cur.execute(f'DROP INDEX IF EXISTS "{name}";')
+    conn.commit()
+    if names:
+        print(f"[index] Dropped {len(names)} indexes for the import: {', '.join(names)}")
+
+
+def restore_indexes(conn):
+    """Builds the indexes saved by drop_secondary_indexes again."""
+    conn.rollback()
+    conn.autocommit = True
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT to_regclass('_import_dropped_index');")
+            if cur.fetchone()[0] is None:
+                return
+            cur.execute("SET maintenance_work_mem = '2GB';")
+            cur.execute("SET max_parallel_maintenance_workers = 4;")
+            cur.execute("SELECT indexname, indexdef FROM _import_dropped_index ORDER BY indexname;")
+            for name, indexdef in cur.fetchall():
+                t = time.time()
+                print(f"[index] Building {name} ...", flush=True)
+                cur.execute(indexdef.replace("CREATE INDEX", "CREATE INDEX IF NOT EXISTS", 1))
+                cur.execute("DELETE FROM _import_dropped_index WHERE indexname = %s;", (name,))
+                print(f"[index] {name} built in {time.time() - t:.0f}s", flush=True)
+            cur.execute("DROP TABLE _import_dropped_index;")
+            cur.execute("ANALYZE;")
+    finally:
+        conn.autocommit = False
+
+
 def import_dataset(filepath: str, batch_size: int = 20000):
     conn = get_connection()
     print(f"[db] Connected to {conn.dsn}")
     ensure_tables(conn)
+    drop_secondary_indexes(conn)
+    try:
+        _import_records(conn, filepath, batch_size)
+    finally:
+        restore_indexes(conn)
+        conn.close()
 
+
+def _import_records(conn, filepath: str, batch_size: int):
     paper_batch: list[tuple] = []
     embedding_batch: list[tuple] = []
     citation_batch: list[tuple] = []
@@ -344,7 +416,11 @@ def import_dataset(filepath: str, batch_size: int = 20000):
     # Get total file size for progress bar (rough estimate)
     file_size = os.path.getsize(filepath)
 
-    with open(filepath, "r", encoding="utf-8") as fh:
+    # A damaged file (e.g. a download that broke off) must not end the import
+    # and lose the batches still in memory: undecodable bytes become U+FFFD,
+    # json.loads rejects those lines and they are counted as skipped.
+    skipped_lines = 0
+    with open(filepath, "r", encoding="utf-8", errors="replace") as fh:
         # Use tqdm for progress bar
         pbar = tqdm(fh, total=None, unit="papers", mininterval=1.0, desc="Importing")
         
@@ -356,15 +432,20 @@ def import_dataset(filepath: str, batch_size: int = 20000):
             try:
                 rec = json.loads(line)
             except json.JSONDecodeError as e:
-                print(f"[warn] Skipping line {line_no}: {e}")
+                skipped_lines += 1
+                if skipped_lines <= 5:
+                    print(f"[warn] Skipping line {line_no}: {e}")
                 continue
 
             # Support both old ("id") and new ("entry_id") field name
-            entry_id = (rec.get("entry_id") or rec.get("id", "")).strip()
+            if not isinstance(rec, dict):
+                skipped_lines += 1
+                continue
+            entry_id = str(rec.get("entry_id") or rec.get("id") or "").strip()
             if not entry_id:
                 continue
 
-            title = rec.get("title", "").strip()
+            title = (rec.get("title") or "").strip()
             authors = rec.get("authors", None)
             abstract = rec.get("abstract", None)
             published = parse_dt(rec.get("published"))
@@ -447,6 +528,9 @@ def import_dataset(filepath: str, batch_size: int = 20000):
                     "refs": f"{total_references:,}"
                 })
 
+    if skipped_lines:
+        print(f"[warn] Skipped {skipped_lines:,} lines that are not valid JSON")
+
     # Flush remaining
     flush_papers(conn, paper_batch)
     flush_embeddings(conn, embedding_batch)
@@ -463,7 +547,6 @@ def import_dataset(filepath: str, batch_size: int = 20000):
         f"{total_citations:,} citations, {total_references:,} references "
         f"in {elapsed:.1f}s"
     )
-    conn.close()
 
 
 # ---------------------------------------------------------------------------

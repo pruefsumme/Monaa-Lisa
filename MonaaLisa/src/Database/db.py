@@ -47,14 +47,28 @@ def is_database_empty() -> bool:
 
 
 """
-Abstract: Returns the most recent published date across all papers.
+Abstract: Returns the date the incremental update starts fetching from: the
+    published date of the paper at position ``skip_newest`` counted from the
+    newest one, or the oldest date when there are fewer papers.
+    Not simply the newest date: a handful of stray recent papers (the dataset
+    has one from January 2026 after a gap of four weeks) would make every
+    paper in between be skipped. Starting about one arXiv day earlier only
+    fetches papers again that the update then drops as already known.
+Args:
+- skip_newest: how many of the newest papers may be ignored as outliers
 Returns: datetime | None
 """
-def get_newest_paper_date():
-    from sqlalchemy import func as sa_func
+def get_newest_paper_date(skip_newest: int = 1000):
     session = SessionLocal()
     try:
-        result = session.query(sa_func.max(DBPaper.published)).scalar()
+        published = (
+            session.query(DBPaper.published)
+            .filter(DBPaper.published.isnot(None))
+            .order_by(DBPaper.published.desc())
+        )
+        result = published.offset(skip_newest).limit(1).scalar()
+        if result is None:
+            result = session.query(func.min(DBPaper.published)).scalar()
         return result
     except Exception as e:
         logger.error(f"Failed to get newest paper date: {e}")
