@@ -4,7 +4,14 @@
 
 monaalisa.org {
 	encode zstd gzip
-	header Strict-Transport-Security "max-age=31536000"
+	# The API sets its own (helmet), these cover the pages of the frontend.
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		X-Frame-Options SAMEORIGIN
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+	}
 
 	handle_path /api/* {
 		reverse_proxy monaa-backend:3000
