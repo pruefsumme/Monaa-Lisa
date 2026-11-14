@@ -8,6 +8,9 @@ from unittest.mock import Mock, MagicMock, patch
 sys.modules.setdefault("Database.db", MagicMock())
 
 from MonaaLisa.src.SemanticPaper.pipeline.incremental import (
+    UPDATE_DONE,
+    UPDATE_FAILED,
+    FetchResult,
     _categories_of,
     _fetch_new_arxiv_papers,
     _normalize_entry_id,
@@ -166,6 +169,19 @@ class TestFetchNewArxivPapers:
         assert len(result) == 2
         # The error must be logged so operators can investigate
         mock_logger.error.assert_called_once()
+        # ...and the caller must learn that the list may be incomplete
+        assert result.failed is True
+        assert "timeout" in result.error
+
+    @patch(f"{MODULE}.arx.Search")
+    @patch(f"{MODULE}.logger")
+    def test_an_empty_answer_is_not_a_failure(self, mock_logger, mock_search):
+        arxiv_client = Mock()
+        arxiv_client.client.results.return_value = iter([])
+
+        result = _fetch_new_arxiv_papers(arxiv_client, datetime(2024, 1, 1))
+
+        assert result.failed is False
 
 
 class TestRunIncrementalUpdate:
@@ -210,6 +226,31 @@ class TestRunIncrementalUpdate:
 
         # SemanticScholar should never be called when there's nothing to process
         s2_client.fetch_batch.assert_not_called()
+
+    # arXiv answered 429/503 before the first page: nothing fetched, but not up to date
+    @patch(f"{MODULE}._fetch_new_arxiv_papers",
+           return_value=FetchResult(failed=True, error="HTTP 503"))
+    @patch(f"{MODULE}.get_paper_count", return_value=100)
+    @patch(f"{MODULE}.get_newest_paper_date", return_value=datetime(2024, 1, 1))
+    @patch(f"{MODULE}.logger")
+    def test_reports_failure_instead_of_up_to_date(self, mock_logger, mock_newest,
+                                                   mock_count, mock_fetch):
+        s2_client = Mock()
+
+        status = run_incremental_update(Mock(), s2_client, Mock())
+
+        assert status == UPDATE_FAILED
+        mock_logger.error.assert_called_once()
+        infos = " ".join(str(c) for c in mock_logger.info.call_args_list)
+        assert "Database is up to date" not in infos
+        s2_client.fetch_batch.assert_not_called()
+
+    @patch(f"{MODULE}._fetch_new_arxiv_papers", return_value=FetchResult())
+    @patch(f"{MODULE}.get_paper_count", return_value=100)
+    @patch(f"{MODULE}.get_newest_paper_date", return_value=datetime(2024, 1, 1))
+    @patch(f"{MODULE}.logger")
+    def test_nothing_new_counts_as_done(self, mock_logger, mock_newest, mock_count, mock_fetch):
+        assert run_incremental_update(Mock(), Mock(), Mock()) == UPDATE_DONE
 
     # arXiv returns papers, but all of them are already in the DB → all are duplicates.
     # This covers the case where arXiv returns results, but after deduplication nothing is left.

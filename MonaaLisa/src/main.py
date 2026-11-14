@@ -15,7 +15,7 @@ import sys
 import signal
 import faulthandler
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from dotenv import load_dotenv
@@ -35,6 +35,7 @@ from SemanticPaper.data.importer import run_import
 from SemanticPaper.pipeline.embedding_pipeline import EmbeddingPipeline
 from SemanticPaper.pipeline.incremental import (
     run_incremental_update,
+    UPDATE_FAILED,
     retry_uncaught_papers,
 )
 
@@ -127,15 +128,28 @@ def main():
         int(os.getenv("INCREMENTAL_MAX_PAPERS", "50000"))
     )
 
+    retry_hours = cfg.get_int(
+        "semanticpaper", "incremental_retry_hours",
+        int(os.getenv("INCREMENTAL_RETRY_HOURS", "6"))
+    )
+
     scheduler = BackgroundScheduler()
+
+    def incremental_job():
+        """One update run. When arXiv did not answer, one more try in a few
+        hours instead of waiting for the next regular run a month later."""
+        if run_incremental_update(arxiv_client, s2_client, pipeline, max_papers_per_run) == UPDATE_FAILED:
+            retry_at = datetime.now() + timedelta(hours=retry_hours)
+            scheduler.add_job(incremental_job, "date", run_date=retry_at,
+                              id="incremental_retry", replace_existing=True)
+            logger.warning(f"Incremental update failed, trying again at {retry_at:%Y-%m-%d %H:%M}")
 
     # Run incremental update immediately, then on schedule
     scheduler.add_job(
-        run_incremental_update,
+        incremental_job,
         "interval",
         days=update_interval_days,
         next_run_time=datetime.now(),
-        args=[arxiv_client, s2_client, pipeline, max_papers_per_run],
         id="incremental_update",
         max_instances=1,
     )

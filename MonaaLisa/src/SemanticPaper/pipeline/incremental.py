@@ -47,6 +47,24 @@ from Database.db import (
 
 logger = Logger("IncrementalPipeline")
 
+# What run_incremental_update returns, so the scheduler can try again soon
+# after a failure instead of waiting for the next regular run
+UPDATE_DONE = "done"
+UPDATE_FAILED = "failed"
+
+
+class FetchResult(list):
+    """
+    The papers fetched from arXiv. ``failed`` is True when arXiv stopped
+    answering before the end (rate limit, outage): the papers fetched until
+    then are still in the list, but there may be more.
+    """
+
+    def __init__(self, papers=(), failed: bool = False, error: str | None = None):
+        super().__init__(papers)
+        self.failed = failed
+        self.error = error
+
 
 # ------------------------------------------------------------------
 #  arXiv gap-fill fetcher
@@ -79,7 +97,7 @@ def _fetch_new_arxiv_papers(arxiv_client: ArxivAPI, since: datetime,
         sort_order=arx.SortOrder.Ascending,
     )
 
-    results = []
+    results = FetchResult()
     try:
         client = arxiv_client.client
         for result in client.results(search):
@@ -88,6 +106,8 @@ def _fetch_new_arxiv_papers(arxiv_client: ArxivAPI, since: datetime,
                 break
     except Exception as e:
         logger.error(f"Error fetching papers from arXiv: {e}")
+        results.failed = True
+        results.error = str(e)
 
     logger.info(f"Fetched {len(results)} papers from arXiv since {since.isoformat()}")
     return results
@@ -146,9 +166,13 @@ def run_incremental_update(
 
     # 1. Hole neue Paper von arXiv
     raw_results = _fetch_new_arxiv_papers(arxiv_client, newest_date, max_results=max_papers)
+    fetch_failed = getattr(raw_results, "failed", False)
     if not raw_results:
+        if fetch_failed:
+            logger.error("arXiv did not answer, nothing was fetched. The database is NOT up to date.")
+            return UPDATE_FAILED
         logger.info("No new papers found on arXiv. Database is up to date.")
-        return
+        return UPDATE_DONE
 
     # 2. Filtere Paper heraus, die bereits in der DB existieren
     fetched = [(_normalize_entry_id(result.entry_id), result) for result in raw_results]
@@ -158,7 +182,7 @@ def run_incremental_update(
     logger.info(f"{len(new_papers)} genuinely new papers after dedup (out of {len(raw_results)} fetched)")
     if not new_papers:
         logger.info("All fetched papers already exist in the DB.")
-        return
+        return UPDATE_FAILED if fetch_failed else UPDATE_DONE
 
     # 3. Batch-Abfrage bei SemanticScholar
     arxiv_ids = [eid for eid, _ in new_papers]
@@ -253,6 +277,10 @@ def run_incremental_update(
         f"Processed: {processed_count}, Uncaught: {uncaught_count}, "
         f"DB total: {paper_count_before} -> {paper_count_after}"
     )
+    if fetch_failed:
+        logger.warning("arXiv stopped answering during the fetch, more papers may be missing.")
+        return UPDATE_FAILED
+    return UPDATE_DONE
 
 def retry_uncaught_papers(
     s2_client: SemanticScholarAPI,
