@@ -219,8 +219,6 @@
         color: var(--text-2);
         font-size: var(--text-xs);
         font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
     }
     .list {
         margin: 0;

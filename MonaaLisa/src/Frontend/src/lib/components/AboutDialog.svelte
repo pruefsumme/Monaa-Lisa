@@ -123,8 +123,6 @@
         color: var(--text);
         font-size: var(--text-sm);
         font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
     }
     ol,
     ul {
