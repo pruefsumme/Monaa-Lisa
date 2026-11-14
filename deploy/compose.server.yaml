@@ -16,6 +16,21 @@
 #     need to run. Start it on purpose with --profile pipeline.
 
 services:
+  # The defaults (128 MB shared buffers, costs for spinning disks) leave a
+  # search reading the 10 GB paper table from disk again and again. Sized for
+  # a server with 16 GB that runs other apps too.
+  db:
+    command:
+      - postgres
+      - -c
+      - shared_buffers=1GB
+      - -c
+      - effective_cache_size=6GB
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - effective_io_concurrency=200
+
   app:
     profiles: ["pipeline"]
 
