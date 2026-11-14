@@ -1,7 +1,8 @@
-# The site block for the server's Caddy (deploy/compose.server.yaml).
+# The site blocks for the server's Caddy (deploy/compose.server.yaml).
 # The API lives on the same domain under /api, so the browser needs no CORS.
+# FRONTEND_ORIGIN and PUBLIC_API_BASE_URL in .env must name the same domain.
 
-monaa.pruefsumme.xyz {
+monaalisa.org {
 	encode zstd gzip
 	header Strict-Transport-Security "max-age=31536000"
 
@@ -12,4 +13,10 @@ monaa.pruefsumme.xyz {
 	handle {
 		reverse_proxy monaa-frontend:3000
 	}
+}
+
+# Older and alternative names lead to the one above, links into the map
+# (paths and ?category=... queries) keep working.
+www.monaalisa.org, monaa.pruefsumme.xyz {
+	redir https://monaalisa.org{uri} permanent
 }
