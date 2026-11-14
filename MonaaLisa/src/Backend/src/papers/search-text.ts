@@ -12,8 +12,10 @@ const MAX_WORDS = 8;
  * up and they hardly narrow a search ("is", "of", "a").
  */
 export function searchWords(text: string): string[] {
-  const words = [...new Set(text.toLowerCase().split(/[\s,;]+/))].filter(
-    Boolean,
+  // A word without any letter or digit ("%%%", "--") can't be looked up in
+  // the trigram indexes, Postgres would read the whole table for it.
+  const words = [...new Set(text.toLowerCase().split(/[\s,;]+/))].filter((w) =>
+    /[\p{L}\p{N}]/u.test(w),
   );
   const long = words.filter((w) => w.length >= 3);
   return (long.length ? long : words).slice(0, MAX_WORDS);

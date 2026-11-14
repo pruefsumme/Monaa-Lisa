@@ -5,6 +5,7 @@ import {
   IsISO8601,
   IsOptional,
   IsString,
+  Matches,
   Max,
   MaxLength,
   Min,
@@ -15,6 +16,8 @@ export const MAX_TAKE = 20000;
 export const DEFAULT_TAKE = 100;
 // Highest `max` for a capped count
 export const MAX_COUNT = 100000;
+
+export const CATEGORY_PATTERN = /^[a-z]+(-[a-z]+)?(\.([A-Za-z]+(-[a-z]+)?)?)?$/;
 
 export const SORT_OPTIONS = [
   'relevance',
@@ -52,8 +55,15 @@ export class QueryPaperDto {
   @MaxLength(300)
   abstract?: string;
 
+  // An arXiv category ("cs.LG", "cond-mat.mes-hall", "hep-th") or the prefix
+  // of a subject ("cs.", "q-bio."). Anything else ("%") can't use the trigram
+  // index and would read the whole table.
   @IsOptional()
   @IsString()
+  @MaxLength(40)
+  @Matches(CATEGORY_PATTERN, {
+    message: 'categories must be an arXiv category',
+  })
   categories?: string;
 
   // Published-Zeitfenster (im Service in Date umwandeln)

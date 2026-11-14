@@ -146,6 +146,8 @@ export class PapersService {
     if (items.length) return { items, fuzzy: false };
 
     const text = q.search!.trim();
+    // no letter or digit in it: no title can be similar either
+    if (!searchWords(text).length) return { items, fuzzy: false };
     const similar = await this.filtered({ ...q, search: undefined })
       .where(sql<boolean>`${text} <% title`)
       .select(columns)
@@ -198,7 +200,10 @@ export class PapersService {
       if (id) {
         filters.push(eb('entry_id', '=', id));
       } else if (search) {
-        for (const word of searchWords(search)) {
+        const words = searchWords(search);
+        // only punctuation: nothing can match, and nothing has to be read
+        if (!words.length) filters.push(sql<SqlBool>`false`);
+        for (const word of words) {
           // a short word has to stand alone ("AI" is not part of "training"),
           // a longer one may be part of a word ("network" finds "networks")
           const whole = /^[a-z0-9]{1,3}$/.test(word);

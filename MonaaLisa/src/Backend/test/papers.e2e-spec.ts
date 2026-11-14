@@ -165,7 +165,9 @@ describeWithTestDb('papers and citations (e2e)', () => {
   it('searches title, authors and abstract and takes % literally', async () => {
     expect(ids(await get('/papers?search=hopper'))).toEqual(['1000.0003']);
     expect(ids(await get('/papers?search=100%25'))).toEqual(['1000.0004']);
-    expect((await get('/papers?search=%25')).total).toBe(1);
+    // a lone "%" has no letter or digit, the trigram indexes can't look it up
+    // and on the full dataset it read the whole table: it finds nothing
+    expect((await get('/papers?search=%25')).total).toBe(0);
   });
 
   it('finds words in any order and across title and authors', async () => {
@@ -238,6 +240,36 @@ describeWithTestDb('papers and citations (e2e)', () => {
     await request(app.getHttpServer())
       .get('/papers/count?search=optimisers&max=0')
       .expect(400);
+  });
+
+  it('finds nothing for a search without letters or digits', async () => {
+    for (const search of ['%25%25%25', '__', '--']) {
+      const page = await get(`/papers?search=${search}&sort=relevance`);
+      expect(page.items).toHaveLength(0);
+    }
+    const res = await request(app.getHttpServer())
+      .get('/papers/count?search=%25%25')
+      .expect(200);
+    expect(res.body).toEqual({ total: 0 });
+  });
+
+  it('accepts arXiv categories and subject prefixes, nothing else', async () => {
+    for (const ok of [
+      'cs.LG',
+      'cs.',
+      'q-bio.',
+      'cond-mat.mes-hall',
+      'hep-th',
+    ]) {
+      await request(app.getHttpServer())
+        .get(`/papers?categories=${ok}&take=1`)
+        .expect(200);
+    }
+    for (const bad of ['%25', '_', 'cs.LG%20OR%201=1', 'a'.repeat(41)]) {
+      await request(app.getHttpServer())
+        .get(`/papers?categories=${bad}&take=1`)
+        .expect(400);
+    }
   });
 
   it('rejects a page size above the limit', async () => {

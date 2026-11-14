@@ -24,6 +24,13 @@ describe('searchWords', () => {
       searchWords('one two three four five six seven eight nine ten'),
     ).toHaveLength(8);
   });
+
+  it('leaves out words without a letter or digit', () => {
+    expect(searchWords('%%% __ --')).toEqual([]);
+    expect(searchWords('k-means -- c++')).toEqual(['k-means', 'c++']);
+    expect(searchWords('Schrödinger Gödel')).toEqual(['schrödinger', 'gödel']);
+    expect(searchWords('β')).toEqual(['β']);
+  });
 });
 
 describe('arxivId', () => {
