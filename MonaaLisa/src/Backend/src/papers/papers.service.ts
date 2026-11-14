@@ -92,6 +92,27 @@ export class PapersService {
   }
 
   /**
+   * Like `count`, but stops after `max` matches: `capped` is true when there
+   * are more. Postgres then reads at most max + 1 rows instead of all of them.
+   */
+  async countUpTo(
+    q: QueryPaperDto,
+    max: number,
+  ): Promise<{ total: number; capped: boolean }> {
+    const counted = await this.db
+      .selectFrom(
+        this.filtered(q)
+          .select(sql`1`.as('one'))
+          .limit(max + 1)
+          .as('matches'),
+      )
+      .select((eb) => eb.fn.countAll<string>().as('count'))
+      .executeTakeFirstOrThrow();
+    const n = Number(counted.count);
+    return { total: Math.min(n, max), capped: n > max };
+  }
+
+  /**
    * The best matches for a search text first:
    * 1. papers with all words in the title or the authors, most cited first
    * 2. then papers where some words are only in the abstract

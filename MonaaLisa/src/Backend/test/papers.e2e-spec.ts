@@ -225,6 +225,21 @@ describeWithTestDb('papers and citations (e2e)', () => {
     expect(res.body).toEqual({ total: 2 });
   });
 
+  it('stops counting at max and says so', async () => {
+    const count = async (max: number) =>
+      (
+        await request(app.getHttpServer())
+          .get(`/papers/count?search=optimisers&max=${max}`)
+          .expect(200)
+      ).body as { total: number; capped: boolean };
+    expect(await count(1)).toEqual({ total: 1, capped: true });
+    expect(await count(2)).toEqual({ total: 2, capped: false });
+    expect(await count(50)).toEqual({ total: 2, capped: false });
+    await request(app.getHttpServer())
+      .get('/papers/count?search=optimisers&max=0')
+      .expect(400);
+  });
+
   it('rejects a page size above the limit', async () => {
     await request(app.getHttpServer()).get('/papers?take=20001').expect(400);
   });

@@ -64,15 +64,20 @@ export function getPapers(query: PaperQuery): Promise<PaperPage> {
     return request<PaperPage>(`/papers?${params}`);
 }
 
-/** GET /papers/count: how many papers match the filters of a query. */
-export async function countPapers(query: PaperQuery): Promise<number> {
+/**
+ * GET /papers/count: how many papers match the filters of a query. With `max`
+ * the backend stops counting there, `capped` says that more papers match.
+ */
+export async function countPapers(query: PaperQuery, max?: number): Promise<{ total: number; capped: boolean }> {
     const params = new URLSearchParams();
     for (const [key, value] of Object.entries(query)) {
         if (value !== undefined && value !== "" && !["take", "skip", "sort", "fields", "count"].includes(key)) {
             params.set(key, String(value));
         }
     }
-    return (await request<{ total: number }>(`/papers/count?${params}`)).total;
+    if (max) params.set("max", String(max));
+    const counted = await request<{ total: number; capped?: boolean }>(`/papers/count?${params}`);
+    return { total: counted.total, capped: counted.capped === true };
 }
 
 /** GET /papers/years: first and last year of publication in the dataset. */

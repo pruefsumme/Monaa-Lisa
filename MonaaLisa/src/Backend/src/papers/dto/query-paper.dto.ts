@@ -13,6 +13,8 @@ import {
 // Upper bound for one page of papers. The graph view asks for at most this many.
 export const MAX_TAKE = 20000;
 export const DEFAULT_TAKE = 100;
+// Highest `max` for a capped count
+export const MAX_COUNT = 100000;
 
 export const SORT_OPTIONS = [
   'relevance',
@@ -78,6 +80,16 @@ export class QueryPaperDto {
   @IsOptional()
   @IsIn(['exact', 'none'])
   count?: 'exact' | 'none';
+
+  // GET /papers/count only: stop counting after this many matches. Counting
+  // every match of a common word reads gigabytes ("quantum" is in 240,000
+  // abstracts), the sidebar only needs to say "more than 1,000".
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(MAX_COUNT)
+  max?: number;
 
   // Pagination
   @IsOptional()

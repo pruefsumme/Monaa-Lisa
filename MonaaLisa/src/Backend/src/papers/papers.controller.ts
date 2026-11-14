@@ -56,9 +56,12 @@ export class PapersController {
   /**
    * GET /papers/count
    * How many papers match the same filters as GET /papers: { total }
+   * With ?max=N it stops counting after N: { total, capped }, capped is true
+   * when more papers match than total says.
    */
   @Get('count')
   async count(@Query() q: QueryPaperDto) {
+    if (q.max) return this.papers.countUpTo(q, q.max);
     return { total: await this.papers.count(q) };
   }
 

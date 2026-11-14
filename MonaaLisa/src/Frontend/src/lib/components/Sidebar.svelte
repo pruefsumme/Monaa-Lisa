@@ -73,6 +73,10 @@
     let results = $state<Paper[] | null>(null);
     /** null while the matches are still being counted */
     let total = $state<number | null>(0);
+    /** More papers match than `total`: counting stops at COUNT_UP_TO */
+    let capped = $state(false);
+    /** Counting every match of a common word reads gigabytes, a rough number is enough here */
+    const COUNT_UP_TO = 1000;
     let searching = $state(false);
     let error = $state<string | null>(null);
 
@@ -147,9 +151,13 @@
                 // the list comes first, counting all matches can take seconds
                 if (!more) {
                     total = null;
-                    countPapers(params)
-                        .then((n) => {
-                            if (lastSearch === search && !fuzzy) total = n;
+                    capped = false;
+                    countPapers(params, COUNT_UP_TO)
+                        .then((counted) => {
+                            if (lastSearch === search && !fuzzy) {
+                                total = counted.total;
+                                capped = counted.capped;
+                            }
                         })
                         .catch(() => {});
                 }
@@ -157,7 +165,10 @@
                 if (id !== requestId) return; // a newer search started meanwhile
                 results = toPapers(page.items);
                 fuzzy = page.fuzzy === true;
-                if (fuzzy) total = results.length;
+                if (fuzzy) {
+                    total = results.length;
+                    capped = false;
+                }
                 const found = results;
                 untrack(() => onresults(found));
             } catch {
@@ -260,7 +271,8 @@
                         {results.length === 0 ? "No results" : `First ${results.length} results`} in {searchScopeLabel},
                         counting…
                     {:else}
-                        {total.toLocaleString("en")} {total === 1 ? "result" : "results"} in {searchScopeLabel}{total >
+                        {capped ? "More than " : ""}{total.toLocaleString("en")}
+                        {total === 1 && !capped ? "result" : "results"} in {searchScopeLabel}{total >
                         results.length
                             ? `, showing ${results.length}`
                             : ""}
