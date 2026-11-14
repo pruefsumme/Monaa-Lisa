@@ -2,7 +2,8 @@
  * Nico August 2025
  */
 import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD } from '@nestjs/core';
+import { QueryTimeoutFilter } from './database/query-timeout.filter';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AppController } from './app.controller';
 import { DatabaseModule } from './database/database.module';
@@ -28,6 +29,9 @@ import { CategoriesModule } from './categories/categories.module';
     CategoriesModule,
   ],
   controllers: [AppController],
-  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
+  providers: [
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_FILTER, useClass: QueryTimeoutFilter },
+  ],
 })
 export class AppModule {}
