@@ -13,6 +13,10 @@ import {
 
 // Upper bound for one page of papers. The graph view asks for at most this many.
 export const MAX_TAKE = 20000;
+// Upper bound for one page with every column (abstracts included). The app
+// asks for at most 50 at once; a low bound keeps the whole dataset from being
+// downloaded in a few hundred requests.
+export const MAX_FULL_TAKE = 500;
 export const DEFAULT_TAKE = 100;
 // Highest `max` for a capped count
 export const MAX_COUNT = 100000;

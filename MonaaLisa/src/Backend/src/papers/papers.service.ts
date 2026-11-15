@@ -6,7 +6,12 @@ import { DatabaseService } from '../database/database.service';
 import { containsPattern } from '../database/sql';
 import { ALL_COLUMNS, LIST_COLUMNS, totalCitations } from './paper-columns';
 import { arxivId, searchWords } from './search-text';
-import { DEFAULT_TAKE, MAX_TAKE, QueryPaperDto } from './dto/query-paper.dto';
+import {
+  DEFAULT_TAKE,
+  MAX_FULL_TAKE,
+  MAX_TAKE,
+  QueryPaperDto,
+} from './dto/query-paper.dto';
 
 /** Requests for more ids than this get no citation lists attached */
 const ENRICH_LIMIT = 50;
@@ -37,7 +42,11 @@ export class PapersService {
     const skip = q.skip ?? 0;
     // The DTO already limits take, this second guard keeps any caller from
     // loading the whole table in one request.
-    const take = Math.min(q.take ?? DEFAULT_TAKE, MAX_TAKE);
+    // Pages with abstracts are held lower than the slim pages of the map.
+    const take = Math.min(
+      q.take ?? DEFAULT_TAKE,
+      q.fields === 'map' ? MAX_TAKE : MAX_FULL_TAKE,
+    );
 
     // Counting every match of a common word takes seconds while the first
     // page is there at once, so a caller can leave the count out and ask

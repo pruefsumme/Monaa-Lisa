@@ -1,7 +1,8 @@
 import { ArrayMaxSize, IsArray, IsString } from 'class-validator';
 
-// The frontend sends ids in chunks of 500, so 5000 leaves plenty of room.
-export const MAX_BATCH_IDS = 5000;
+// The frontend sends ids in chunks of 500. A batch returns every column, so
+// it is held to the same bound as a full page of GET /papers.
+export const MAX_BATCH_IDS = 500;
 
 export class BatchPapersDto {
   @IsArray()

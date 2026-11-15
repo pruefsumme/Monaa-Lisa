@@ -276,6 +276,19 @@ describeWithTestDb('papers and citations (e2e)', () => {
     await request(app.getHttpServer()).get('/papers?take=20001').expect(400);
   });
 
+  it('holds pages with abstracts lower than the slim map pages', async () => {
+    const full = (await request(app.getHttpServer()).get('/papers?take=2000&count=none').expect(200)).body;
+    expect(full.take).toBe(500);
+    const slim = (await request(app.getHttpServer()).get('/papers?take=2000&fields=map&count=none').expect(200)).body;
+    expect(slim.take).toBe(2000);
+  });
+
+  it('rejects a batch of more than 500 ids', async () => {
+    const ids = (n: number) => Array.from({ length: n }, (_, i) => `1000.${i}`);
+    await request(app.getHttpServer()).post('/papers/batch').send({ entryIds: ids(500) }).expect(201);
+    await request(app.getHttpServer()).post('/papers/batch').send({ entryIds: ids(501) }).expect(400);
+  });
+
   it('returns a single paper with its citation lists, 404 when unknown', async () => {
     const res = await request(app.getHttpServer())
       .get('/papers/1000.0001')
