@@ -29,8 +29,6 @@
 
 ## License
 
-Copyright (C) 2026 Nico Bestek, Bastian Rosinski, Lenio Cabral-Rosario, Nick Wittkowski
-
 Unless otherwise stated, all files in this repository are licensed under the **GNU Affero General Public License v3 (AGPL-3.0)**.
 
 See the [LICENSE](LICENSE) file for the full license text.
