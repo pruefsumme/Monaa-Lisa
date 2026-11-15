@@ -1,4 +1,4 @@
-<img src="MonaaLisa/src/Frontend/src/assets/monaa_lisa_logo.png" width="250" alt="MONAA-LISA Logo">
+<img src="docs/map.jpg" alt="The map of Monaa-Lisa: every paper on arXiv as one dot, 2,847,130 papers, coloured by subject">
 
 # Monaa-Lisa
 
